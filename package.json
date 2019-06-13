@@ -1,0 +1,39 @@
+{
+  "name": "@avensia-oss/critical-css",
+  "version": "1.0.0",
+  "description": "A library that extracts the CSS selectors that are necessary to render a specific piece of HTML",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "keywords": [
+    "critical",
+    "css"
+  ],
+  "author": "Erik Källén <erik.kallen@avensia.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/avensia-oss/critical-css"
+  },
+  "homepage": "https://github.com/avensia-oss/critical-css",
+  "private": false,
+  "scripts": {
+    "test": "jest",
+    "build": "tsc --version && tsc --project \"./src\""
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "devDependencies": {
+    "@types/css-tree": "*",
+    "@types/csso": "*",
+    "@types/jest": "^24.0.14",
+    "jest": "^24.8.0",
+    "ts-jest": "^24.0.2",
+    "tslib": "^1.10.0",
+    "typescript": "^3.5.1"
+  },
+  "dependencies": {
+    "css-tree": "^1.0.0-alpha.28",
+    "csso": "^3.5.1",
+    "node-html-parser": "^1.0.0"
+  }
+}
