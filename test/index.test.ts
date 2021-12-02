@@ -390,4 +390,18 @@ describe('criticalcss', () => {
       }`,
     );
   });
+
+  it('keeps only the last one of duplicated rules', () => {
+    runTest(
+      '.a {display: none; } .a {display: block} .a {display: none; }',
+      '<div class="a">hello</div>',
+      '.a {display: block} .a {display: none}',
+    );
+
+    runTest(
+      '@media screen { .a {display: none; } .a {display: block} .a {display: none; } }',
+      '<div class="a">hello</div>',
+      '@media screen { .a {display: block} .a {display: none} }',
+    );
+  });
 });

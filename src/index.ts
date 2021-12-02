@@ -286,12 +286,14 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
         return {
           type: 'media',
           prelude: '@' + node.name + (node.prelude ? ' ' + csstree.generate(node.prelude) : ''),
-          rules: node.block
-            ? (node.block.children
-                .map(mapChild)
-                .filter(c => !!c)
-                .toArray() as ParsedCssElement[])
-            : [],
+          rules: removeDuplicates(
+            node.block
+              ? (node.block.children
+                  .map(mapChild)
+                  .filter(c => !!c)
+                  .toArray() as ParsedCssElement[])
+              : []
+          ),
         };
       } else if (node.name === 'import' && node.prelude && 'children' in node.prelude) {
         const items: CssValueItem[] = ['@import '];
@@ -340,6 +342,23 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
   }
 }
 
+function removeDuplicates(rules: ParsedCssElement[]) {
+  // Note that we preserve the last of all duplicated rules because this is the rule that will take precedence
+  const found = new Set<string>();
+  const result = []
+  for (let i = rules.length - 1; i >= 0; i--) {
+    const json = JSON.stringify(rules[i]);
+    if (!found.has(json)) {
+      result.push(rules[i]);
+      found.add(json);
+    }
+  }
+
+  result.reverse();
+
+  return result;
+}
+
 /**
  * Parse CSS
  * @param css The CSS to parse
@@ -360,9 +379,11 @@ export function parse(css: string): ParsedCss {
     }
   });
 
+  const deduplicatedCss = removeDuplicates(parsedCss);
+
   return {
     generate(html, globalUsage, assetsHost) {
-      return generate(parsedCss, html, globalUsage, assetsHost);
+      return generate(deduplicatedCss, html, globalUsage, assetsHost);
     }
   };
 }
