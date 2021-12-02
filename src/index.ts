@@ -1,5 +1,4 @@
 import { parse as parseHtml, NodeType, Node, HTMLElement } from 'node-html-parser';
-import * as csso from 'csso';
 import * as csstree from 'css-tree';
 
 /**
@@ -28,28 +27,6 @@ export interface GlobalUsageType {
    */
   tags?: string[];
 };
-
-export interface CompressOptions {
-  /**
-   * Disable or enable a structure optimisations.
-   * @default true
-   */
-  restructure?: boolean;
-  /**
-   * Enables merging of @media rules with the same media query by splitted by other rules.
-   * The optimisation is unsafe in general, but should work fine in most cases. Use it on your own risk.
-   * @default false
-   */
-  forceMediaMerge?: boolean;
-  /**
-   * Specify what comments to leave:
-   * - 'exclamation' or true – leave all exclamation comments
-   * - 'first-exclamation' – remove every comment except first one
-   * - false – remove all comments
-   * @default true
-   */
-  comments?: string | boolean;
-}
 
 type CssValueItem = CssAssetsHostValue | string;
 type CssValue = string | CssValueItem[];
@@ -372,14 +349,10 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
 /**
  * Parse CSS
  * @param css The CSS to parse
- * @param compressConfig Compress options to apply to the CSS as part of the parsing. Either true (default compression), false (no compression), or a set of options (see https://github.com/css/csso for more info)
  * @returns A result object that can be passed to generate()
  */
-export function parse(css: string, compressConfig?: CompressOptions | boolean): ParseResult {
+export function parse(css: string): ParseResult {
   let ast = csstree.parse(css);
-  if (compressConfig) {
-    ast = csso.compress(ast, typeof compressConfig === 'boolean' ? {} : compressConfig).ast;
-  }
 
   if (ast.type !== 'StyleSheet') {
     throw new Error(`Unexpected type ${ast.type}, expected 'StyleSheet'`);
