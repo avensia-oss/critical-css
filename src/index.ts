@@ -2,11 +2,18 @@ import { parse as parseHtml, NodeType, Node, HTMLElement } from 'node-html-parse
 import * as csstree from 'css-tree';
 
 /**
- * This represents the result of a call to parse(). You should not use values of this type for any
- * other purpose than to use them as an argument to generate().
+ * Represents an instance of parsed CSS
  */
-export interface ParseResult {
-  __thisObjectIsOpaqueAndShouldOnlyBePassedBetweenParseAndGenerate: number;
+ export interface ParsedCss {
+  /**
+   * Generate the critical CSS required to display a chunk of HTML.
+   * @param html The HTML you want to inspect.
+   * @param parseResult The value returned from a previous call to parse().
+   * @param globalUsage Information about elements whose CSS will be returned even though they do not appear in the HTML.
+   * @param assetsHost If specified, external resources without a host will be rewritten to use this host (eg. if assetsHost is "somehost.com", then "url(/image.png)" will be rewritten to "url(//somehost.com/image.png)")
+   * @returns The critical CSS required for the specified HTML.
+   */
+  generate(html: string, globalUsage?: GlobalUsageType, assetsHost?: string): string;
 }
 
 export interface GlobalUsageType {
@@ -89,17 +96,8 @@ function getDomContent(renderedHtml: string, globalUsage: GlobalUsageType) {
   };
 }
 
-/**
- * Generate the critical CSS required to display a chunk of HTML.
- * @param html The HTML you want to inspect.
- * @param parseResult The value returned from a previous call to parse().
- * @param globalUsage Information about elements whose CSS will be returned even though they do not appear in the HTML.
- * @param assetsHost If specified, external resources without a host will be rewritten to use this host (eg. if assetsHost is "somehost.com", then "url(/image.png)" will be rewritten to "url(//somehost.com/image.png)")
- * @returns The critical CSS required for the specified HTML.
- */
-export function generate(html: string, parseResult: ParseResult, globalUsage?: GlobalUsageType, assetsHost?: string) {
+function generate(parsedCss: ParsedCssElement[], html: string, globalUsage?: GlobalUsageType, assetsHost?: string) {
   const { classes, ids, tags } = getDomContent(html, globalUsage || {});
-  const parsedCss: ParsedCssElement[] | null = parseResult as any;
 
   function shouldInclude(rule: CssRule) {
     return !rule.dependencySets || rule.dependencySets.some(
@@ -108,10 +106,6 @@ export function generate(html: string, parseResult: ParseResult, globalUsage?: G
         (!set.ids || set.ids.every(c => ids.has(c))) &&
         (!set.tags || set.tags.every(c => tags.has(c))),
     );
-  }
-
-  if (!parsedCss) {
-    throw new Error('Must call initCriticalCss before createCriticalCss');
   }
 
   function generateValue(value: CssValue) {
@@ -351,20 +345,24 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
  * @param css The CSS to parse
  * @returns A result object that can be passed to generate()
  */
-export function parse(css: string): ParseResult {
+export function parse(css: string): ParsedCss {
   let ast = csstree.parse(css);
 
   if (ast.type !== 'StyleSheet') {
     throw new Error(`Unexpected type ${ast.type}, expected 'StyleSheet'`);
   }
 
-  const result: ParsedCssElement[] = [];
+  const parsedCss: ParsedCssElement[] = [];
   ast.children.forEach(child => {
     const mapped = mapChild(child);
     if (mapped) {
-      result.push(mapped);
+      parsedCss.push(mapped);
     }
   });
 
-  return result as any;
+  return {
+    generate(html, globalUsage, assetsHost) {
+      return generate(parsedCss, html, globalUsage, assetsHost);
+    }
+  };
 }

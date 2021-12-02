@@ -1,4 +1,4 @@
-import { parse, generate } from '../src/';
+import { parse } from '../src/';
 
 function runTest(
   original: string,
@@ -10,8 +10,8 @@ function runTest(
     return s.replace(/\s*([{}:,;])\s*/g, '$1');
   }
 
-  const parsedCss = parse(original, false);
-  const actual = generate(html, parsedCss, globalUsage || {}, 'static.com');
+  const parsedCss = parse(original);
+  const actual = parsedCss.generate(html, globalUsage || {}, 'static.com');
   expect(fix(actual)).toBe(fix(expected));
 }
 

@@ -4,17 +4,17 @@ A library that takes a chunk of CSS and extracts only the parts that are require
 
 ## Usage
 
-The library only exports two functions: `parse()` and `generate()`. The intended usage is that the output from `parse()` should be passed to `generate()`. Since `generate()` is much cheaper than `parse()`, `parse()` should preferrably only be called once for many calls to `generate()`.
+The library only exports one function: `parse()`, which returns an object with a method `generate()`, which returns a string with only the CSS that is required in order to correctly display the passed HTML.
 
 ### Example
 ```
-import { parse, generate } from '@avensia-oss/critical-css';
+import { parse } from '@avensia-oss/critical-css';
 
 const css = '.main { display: block; } .unused { display: inline }';
 const html = '<div class="main"><span>Hello, world</span></div>';
 
 const parsedCss = parse(css);
-const criticalCss = generate(html, parsedCss);
+const criticalCss = parsedCss.generate(html);
 
 expect(criticalCss).toBe('.main { display: block; }');
 ```
