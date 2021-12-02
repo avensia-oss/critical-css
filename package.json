@@ -1,6 +1,6 @@
 {
   "name": "@avensia-oss/critical-css",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A library that extracts the CSS selectors that are necessary to render a specific piece of HTML",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
