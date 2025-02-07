@@ -404,4 +404,48 @@ describe('criticalcss', () => {
       '@media screen { .a {display: block} .a {display: none} }',
     );
   });
+
+  it('works with css variables', () => {
+    runTest(
+      `.a {
+        display: block;
+        --test: 10px;
+      }
+      .b {
+        display: flex;
+        padding: var(--test);
+      }`,
+      '<div class="a">hello<div class="b"></div></div>',
+      `.a {
+        display: block;
+        --test: 10px;
+      }
+      .b {
+        display: flex;
+        padding: var(--test);
+      }`,
+    );
+  });
+
+  it('works with :root scope', () => {
+    runTest(
+      `:root {
+        background: red;
+        --test: 10px;
+      }
+      .a {
+        display: flex;
+        padding: var(--test);
+      }`,
+      '<div class="a">hello</div>',
+      `:root {
+        background: red;
+        --test: 10px;
+      }
+      .a {
+        display: flex;
+        padding: var(--test);
+      }`,
+    );
+  });
 });
