@@ -16,22 +16,25 @@
   "homepage": "https://github.com/avensia-oss/critical-css",
   "private": false,
   "scripts": {
-    "test": "jest",
+    "test": "jest --watch",
+    "tt": "vitest",
     "build": "tsc --version && tsc --project \"./src\""
   },
   "files": [
     "dist/**/*"
   ],
   "devDependencies": {
-    "@types/css-tree": "*",
+    "@types/css-tree": "2.3.10",
     "@types/jest": "^24.0.14",
+    "csstree-validator": "^4.0.1",
     "jest": "^24.8.0",
     "ts-jest": "^24.0.2",
     "tslib": "^1.10.0",
-    "typescript": "^3.5.1"
+    "typescript": "^4.9.5",
+    "vitest": "^3.0.5"
   },
   "dependencies": {
-    "css-tree": "^1.0.0",
-    "node-html-parser": "^1.0.0"
+    "css-tree": "^3.1.0",
+    "node-html-parser": "^7.0.1"
   }
 }

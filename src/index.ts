@@ -1,10 +1,14 @@
 import { parse as parseHtml, NodeType, Node, HTMLElement } from 'node-html-parser';
-import * as csstree from 'css-tree';
+import type * as csstree from 'css-tree';
+import { generate as csstreeGenerate, parse as csstreeParse } from 'css-tree';
+
+
+const GEN_MODE: 'safe' | 'spec' = 'safe';
 
 /**
  * Represents an instance of parsed CSS
  */
- export interface ParsedCss {
+export interface ParsedCss {
   /**
    * Generate the critical CSS required to display a chunk of HTML.
    * @param html The HTML you want to inspect.
@@ -70,6 +74,7 @@ function getDomContent(renderedHtml: string, globalUsage: GlobalUsageType) {
     if (!isElement(node)) {
       return;
     }
+
     const attributes = node.attributes;
     const c: string = attributes.class;
     if (c) {
@@ -114,12 +119,16 @@ function generate(parsedCss: ParsedCssElement[], html: string, globalUsage?: Glo
     } else {
       let result = '';
       for (const v of value) {
+        // console.log('Asset time! ', { v, result })
         if (typeof v === 'string') {
           result += v;
+          // console.log('Case 1, string!', { v, result })
         } else if ('type' in v && v.type === 'assetshost') {
           result += (assetsHost ? '//' + assetsHost : '');
+          // console.log('Case 2, string!', { v, result })
         }
       }
+      // console.log('final', { result })
       return result;
     }
   }
@@ -141,6 +150,7 @@ function generate(parsedCss: ParsedCssElement[], html: string, globalUsage?: Glo
       }
     });
 
+    // console.log('Result', { result })
     return result;
   }
 
@@ -192,8 +202,7 @@ function mapRule(node: csstree.CssNode): CssRule {
     throw new Error(`Unexpected type ${node.type}, expected 'Rule'`);
   }
 
-  const items = [csstree.generate(node.prelude) + '{'];
-
+  const items = [csstreeGenerate(node.prelude, { mode: GEN_MODE }) + '{'];
   let firstDeclaration = true;
   node.block.children.forEach(c => {
     if (c.type !== 'Declaration') {
@@ -213,7 +222,10 @@ function mapRule(node: csstree.CssNode): CssRule {
     type: 'rule',
     text: simplify(items),
     dependencySets:
-      node.prelude.type === 'SelectorList' ? node.prelude.children.map(generateDependencySet).toArray() : [],
+      node.prelude.type === 'SelectorList'
+        ? Array.from(node.prelude.children).map(generateDependencySet)
+        : [],
+    // ? node.prelude.children.map(generateDependencySet).toArray()
   };
 }
 
@@ -241,9 +253,11 @@ function pushDeclaration(items: CssValueItem[], value: csstree.Declaration) {
 
     value.value.children.forEach(v => {
       if (v.type === 'Url') {
-        pushUrlValue(items, v.value);
+        // console.log({ node: v, value: v.value })
+        // pushUrlValue(items, v.value)
+        pushUrlValue(items, v)
       } else {
-        items.push(csstree.generate(v));
+        items.push(csstreeGenerate(v, { mode: GEN_MODE }));
       }
     });
 
@@ -251,32 +265,75 @@ function pushDeclaration(items: CssValueItem[], value: csstree.Declaration) {
       items.push(' !important');
     }
   } else {
-    items.push(csstree.generate(value.value))
+    items.push(csstreeGenerate(value.value, { mode: GEN_MODE }));
   }
 }
 
 function pushUrlValue(items: CssValueItem[], node: csstree.CssNode) {
-  if (node.type === 'Raw' || node.type === 'String') {
+  if (node.type === 'Url') {
+    // console.log('UrlNode: ', { node: node })
+    console.log('UrlNode: ', { node: node.value })
     items.push('url(');
     pushUrlString(items, node.value);
     items.push(')');
   } else {
-    items.push(csstree.generate(node));
+    items.push(csstreeGenerate(node, { mode: GEN_MODE }));
   }
 }
 
+
+// function pushUrlValue(items: CssValueItem[], node: csstree.CssNode) {
+//   if (node.type === 'Raw' || node.type === 'String') {
+//     items.push('url(');
+//     pushUrlString(items, node.value);
+//     items.push(')');
+//   } else {
+//     items.push(csstreeGenerate(node, { mode: GEN_MODE }));
+//   }
+// }
+
+// function pushUrlString(items: CssValueItem[], value: string) {
+//   console.log('urlString handling: ', { value })
+//   const quote = value.length > 0 && (value[0] === '"' || value[0] === '\'') ? value[0] : '';
+//   const unquotedValue = quote ? value.substring(1, value.length - 1) : value;
+//   // const unquotedValue = quote ? value.substr(1, value.length - 2) : value;
+//   const entry: CssValueItem[] = []
+//
+//   if (unquotedValue.startsWith('/') && !unquotedValue.startsWith('//')) {
+//     if (quote) {
+//       entry.push(quote);
+//       // items.push(quote);
+//     }
+//     entry.push({ type: 'assetshost' });
+//     // items.push({ type: 'assetshost' });
+//
+//     // items.push(unquotedValue + quote);
+//     // items.push(unquotedValue);
+//     entry.push(unquotedValue);
+//
+//     if (quote) {
+//       // items.push(quote);
+//       entry.push(quote);
+//     }
+//   } else {
+//     entry.push(value);
+//     // items.push(value);
+//   }
+//   items.push(...entry);
+// }
+
+
 function pushUrlString(items: CssValueItem[], value: string) {
-  const quote = value.length > 0 && (value[0] === '"' || value[0] === '\'') ? value[0] : '';
-  const unquotedValue = quote ? value.substr(1, value.length - 2) : value;
-  if (unquotedValue.startsWith('/') && !unquotedValue.startsWith('//')) {
-    if (quote) {
-      items.push(quote);
-    }
-    items.push({type: 'assetshost'});
-    items.push(unquotedValue + quote);
+  const entry: CssValueItem[] = []
+  if (value.startsWith('/') && !value.startsWith('//')) {
+    entry.push({ type: 'assetshost' }, value);
   } else {
-    items.push(value);
+    entry.push(value);
   }
+
+  // the "String" type stores a decoded string value,
+  // meaning if it had quotes, they were removed
+  items.push('"', ...entry, '"');
 }
 
 function mapChild(node: csstree.CssNode): ParsedCssElement | null {
@@ -285,13 +342,13 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
       if (node.name === 'supports' || node.name === 'media') {
         return {
           type: 'media',
-          prelude: '@' + node.name + (node.prelude ? ' ' + csstree.generate(node.prelude) : ''),
+          prelude: '@' + node.name + (node.prelude ? ' ' + csstreeGenerate(node.prelude, { mode: "safe" }) : ''),
           rules: removeDuplicates(
             node.block
               ? (node.block.children
-                  .map(mapChild)
-                  .filter(c => !!c)
-                  .toArray() as ParsedCssElement[])
+                .map(mapChild)
+                .filter(c => !!c)
+                .toArray() as ParsedCssElement[])
               : []
           ),
         };
@@ -300,13 +357,24 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
         let isFirst = true;
         node.prelude.children.forEach(c => {
           if (isFirst && c.type === 'String') {
+
+            // const decoratedValueWithQuotations = `"${c.value}"`;
+            // pushUrlString(items, decoratedValueWithQuotations);
             pushUrlString(items, c.value);
           } else if (c.type === 'Url') {
-            pushUrlValue(items, c.value);
+            pushUrlValue(items, c);
+            // console.log("PUSHING:")
+            // console.log({ items })
           } else {
-            items.push(csstree.generate(c));
+            console.log('xxxx', { c })
+            const unknown = csstreeGenerate(c, { mode: GEN_MODE, })
+            console.log({ unknown })
+            items.push(
+              unknown
+            );
           }
           isFirst = false;
+          console.log({ items })
         });
         items.push(';');
         return { type: 'rule', text: simplify(items) };
@@ -320,19 +388,18 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
           if (c.type === 'Declaration') {
             pushDeclaration(items, c);
           } else {
-            items.push(csstree.generate(c));
+            items.push(csstreeGenerate(c, { mode: GEN_MODE }));
           }
           first = false;
         });
         items.push('}');
         return { type: 'rule', text: simplify(items) };
       } else {
-        return csstree.generate(node);
+        return csstreeGenerate(node, { mode: GEN_MODE });
       }
 
     case 'Rule':
       return mapRule(node);
-
     case 'Raw':
     case 'Comment':
       return null;
@@ -365,7 +432,8 @@ function removeDuplicates(rules: ParsedCssElement[]) {
  * @returns A result object that can be passed to generate()
  */
 export function parse(css: string): ParsedCss {
-  let ast = csstree.parse(css);
+  // is included in css
+  let ast = csstreeParse(css);
 
   if (ast.type !== 'StyleSheet') {
     throw new Error(`Unexpected type ${ast.type}, expected 'StyleSheet'`);

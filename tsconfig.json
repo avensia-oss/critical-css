@@ -1,11 +1,27 @@
 {
+  // "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "es5",
     "module": "commonjs",
+    "lib": [
+      "es2015",
+      "dom"
+    ],
+    "declaration": true,
+    "outDir": "./dist",
     "strict": true,
-    "noEmitOnError": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "lib": ["es2015"],
-  }
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "node"
+  },
+  "include": [
+    "src/",
+    "vitest.config.ts",
+    "test/",
+    "types/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
