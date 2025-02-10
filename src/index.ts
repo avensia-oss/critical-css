@@ -1,6 +1,6 @@
 import { parse as parseHtml, NodeType, Node, HTMLElement } from 'node-html-parser';
 import type * as csstree from 'css-tree';
-import { generate as csstreeGenerate, parse as csstreeParse } from 'css-tree';
+import { string, generate as csstreeGenerate, parse as csstreeParse } from 'css-tree';
 
 
 const GEN_MODE: 'safe' | 'spec' = 'safe';
@@ -133,13 +133,13 @@ function generate(parsedCss: ParsedCssElement[], html: string, globalUsage?: Glo
     }
   }
 
-  function generate(nodes: ParsedCssElement[]) {
+  function innerGenerate(nodes: ParsedCssElement[]) {
     let result = '';
     nodes.forEach(c => {
       if (typeof c === 'string') {
         result += c;
       } else if (c.type === 'media') {
-        const innerResult = generate(c.rules);
+        const innerResult = innerGenerate(c.rules);
         if (innerResult) {
           result += generateValue(c.prelude) + '{' + innerResult + '}';
         }
@@ -154,8 +154,9 @@ function generate(parsedCss: ParsedCssElement[], html: string, globalUsage?: Glo
     return result;
   }
 
-  return generate(parsedCss);
+  return innerGenerate(parsedCss);
 }
+
 
 function generateDependencySet(node: csstree.CssNode) {
   if (node.type !== 'Selector') {
@@ -205,6 +206,7 @@ function mapRule(node: csstree.CssNode): CssRule {
   const items = [csstreeGenerate(node.prelude, { mode: GEN_MODE }) + '{'];
   let firstDeclaration = true;
   node.block.children.forEach(c => {
+    //TODO: Seems like @position-try and @starting-style ends up in here
     if (c.type !== 'Declaration') {
       throw new Error(`Unexpected type ${c.type}, expected 'Declaration'`);
     }
@@ -220,7 +222,7 @@ function mapRule(node: csstree.CssNode): CssRule {
 
   return {
     type: 'rule',
-    text: simplify(items),
+    text: consolidateItemsToString(items),
     dependencySets:
       node.prelude.type === 'SelectorList'
         ? Array.from(node.prelude.children).map(generateDependencySet)
@@ -229,7 +231,7 @@ function mapRule(node: csstree.CssNode): CssRule {
   };
 }
 
-function simplify(parts: CssValueItem[]): CssValue {
+function consolidateItemsToString(parts: CssValueItem[]): CssValue {
   if (!parts.length) {
     return '';
   }
@@ -247,32 +249,52 @@ function simplify(parts: CssValueItem[]): CssValue {
   return result.length === 1 && typeof result[0] === 'string' ? result[0] as string : result;
 }
 
-function pushDeclaration(items: CssValueItem[], value: csstree.Declaration) {
-  if (value.value.type === 'Value') {
-    items.push(value.property + ':');
+function pushDeclaration(items: CssValueItem[], decl: csstree.Declaration) {
+  // NOTE: decl.property is the name of the CSS property
+  console.log('decl value type', decl.value.type)
 
-    value.value.children.forEach(v => {
-      if (v.type === 'Url') {
-        // console.log({ node: v, value: v.value })
-        // pushUrlValue(items, v.value)
+
+  if (decl.value.type === 'Value') {
+    items.push(decl.property + ':');
+    // console.log('Declaration children:', decl.value.children.map(child => ({
+    //   type: child.type,
+    //   ...(child.type === 'Identifier' ? { name: child.name } : {}),
+    //   ...(child.type === 'Number' ? { value: child.value } : {})
+    // })));
+    let isFirst = true;
+    decl.value.children.forEach(v => {
+      if (!isFirst) {
+        items.push(' '); // Add space between items
+      }
+      if (v.type === 'String') {
+        // encode string values, needed for some things after 2.x
+        items.push(string.encode(v.value));
+      } else if (v.type === 'Url') {
         pushUrlValue(items, v)
+      } else if (v.type === 'Function' && v.name === 'format') {
+        // ensure format() functions are prepended with a space
+        items.push(csstreeGenerate(v, { mode: GEN_MODE }));
       } else {
         items.push(csstreeGenerate(v, { mode: GEN_MODE }));
       }
+      isFirst = false;
     });
-
-    if (value.important) {
+    if (decl.important) {
+      items.push(' !important');
+    }
+  } else if (decl.value.type === 'Raw') {
+    items.push(decl.property + ':', decl.value.value);
+    if (decl.important) {
       items.push(' !important');
     }
   } else {
-    items.push(csstreeGenerate(value.value, { mode: GEN_MODE }));
+    items.push(csstreeGenerate(decl.value, { mode: GEN_MODE }));
+    throw new Error('This should NEVER happen.')
   }
 }
 
 function pushUrlValue(items: CssValueItem[], node: csstree.CssNode) {
   if (node.type === 'Url') {
-    // console.log('UrlNode: ', { node: node })
-    console.log('UrlNode: ', { node: node.value })
     items.push('url(');
     pushUrlString(items, node.value);
     items.push(')');
@@ -337,6 +359,9 @@ function pushUrlString(items: CssValueItem[], value: string) {
 }
 
 function mapChild(node: csstree.CssNode): ParsedCssElement | null {
+  // console.log({ nt: node.type })
+  console.log("node", node)
+
   switch (node.type) {
     case 'Atrule':
       if (node.name === 'supports' || node.name === 'media') {
@@ -353,32 +378,28 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
           ),
         };
       } else if (node.name === 'import' && node.prelude && 'children' in node.prelude) {
+        // handle @import nodes with children
         const items: CssValueItem[] = ['@import '];
         let isFirst = true;
-        node.prelude.children.forEach(c => {
+        node.prelude.children.forEach((c) => {
           if (isFirst && c.type === 'String') {
-
-            // const decoratedValueWithQuotations = `"${c.value}"`;
-            // pushUrlString(items, decoratedValueWithQuotations);
             pushUrlString(items, c.value);
           } else if (c.type === 'Url') {
             pushUrlValue(items, c);
-            // console.log("PUSHING:")
-            // console.log({ items })
           } else {
-            console.log('xxxx', { c })
             const unknown = csstreeGenerate(c, { mode: GEN_MODE, })
-            console.log({ unknown })
             items.push(
+              // ensure space between media query list and url
+              " ",
               unknown
             );
           }
           isFirst = false;
-          console.log({ items })
         });
         items.push(';');
-        return { type: 'rule', text: simplify(items) };
+        return { type: 'rule', text: consolidateItemsToString(items) };
       } else if (node.name === 'font-face' && node.block) {
+        // handle font face
         const items: CssValueItem[] = ['@font-face{'];
         let first = true;
         node.block.children.forEach(c => {
@@ -393,7 +414,47 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
           first = false;
         });
         items.push('}');
-        return { type: 'rule', text: simplify(items) };
+        return { type: 'rule', text: consolidateItemsToString(items) };
+      } else if (node.name === 'counter-style' && node.prelude && 'children' in node.prelude && node.block) {
+        // handle @counter-style nodes with children
+        const items: CssValueItem[] = ['@counter-style'];
+        let isFirst = true;
+        // // TODO: Found this, maybe replace the map?
+        const wat = [csstreeGenerate(node.prelude, { mode: GEN_MODE }) + '{'];
+
+        console.log({ wat })
+        node.prelude.children.forEach((c) => {
+          // if (isFirst && c.type === 'Identifier') {
+          //   items.push(c.name);
+          // } else 
+          if (c.type === 'String') {
+            items.push(c.value);
+            // items.push(reEscapeUnicode(c.value)); // Apply Unicode escaping
+          } else {
+            const unknown = csstreeGenerate(c, { mode: GEN_MODE, })
+            items.push(
+              // ensure space between media query list and url
+              " ",
+              unknown
+            );
+          }
+          isFirst = false;
+        });
+        items.push('{');
+        let first = true;
+        node.block.children.forEach(c => {
+          if (!first) {
+            items.push(';');
+          }
+          if (c.type === 'Declaration') {
+            pushDeclaration(items, c);
+          } else {
+            items.push(csstreeGenerate(c, { mode: GEN_MODE }));
+          }
+          first = false;
+        });
+        items.push('}');
+        return { type: 'rule', text: consolidateItemsToString(items) };
       } else {
         return csstreeGenerate(node, { mode: GEN_MODE });
       }

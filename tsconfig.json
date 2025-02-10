@@ -1,5 +1,4 @@
 {
-  // "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "es5",
     "module": "commonjs",
@@ -8,20 +7,22 @@
       "dom"
     ],
     "declaration": true,
+    "declarationDir": "./dist",
     "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "node"
   },
   "include": [
-    "src/",
-    "vitest.config.ts",
-    "test/",
-    "types/*.d.ts"
+    "src/"
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "./*.ts",
+    "vitest.config.ts",
+    "test/",
+    "types/*.d.ts"
   ]
 }

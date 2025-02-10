@@ -1,4 +1,6 @@
 import { parse } from '../src/';
+import { readFileSync } from "fs"
+import path from 'path';
 // import { validate } from 'csstree-validator';
 
 function runTest(
@@ -21,7 +23,44 @@ function runTest(
   // console.log(res)
 }
 
+async function loadHtml() {
+  const html = readFileSync(path.resolve(__dirname, '..', 'ssr.html'), 'utf8')
+  return html
+
+}
+
+
+async function loadCss() {
+  const css = readFileSync(path.resolve(__dirname, '../server.bundle.css'), 'utf8')
+  return css
+}
+
+
 describe('criticalcss', () => {
+  // let html: string;
+  // let css: string;
+  //
+  // beforeAll(async () => {
+  //   // Simulate an asynchronous operation (e.g., fetching data)
+  //   html = await loadHtml();
+  //   css = await loadCss();
+  // });
+  // it('works', () => {
+  //
+  //   const parsed = parse(css);
+  //   const cssGlobalUsage = {
+  //     classes: ['ie', 'ios', 'ff', 'ios8', 'sf'],
+  //     ids: ['container'],
+  //     tags: ['html', 'body'],
+  //   };
+  //   const critical = parsed.generate(html, cssGlobalUsage, 'static.com');
+  //
+  //
+  //   console.log(critical)
+  //
+  //   console.log({ len: critical.length, included: critical.includes('brandTeaserBase') })
+  //
+  // })
   it('works with class selectors', () => {
     runTest('.a {display: none} .b {display: block}', '<div class="a">hello</div>', '.a {display: none}');
     runTest('.a, .b {display: none} .b {display: block}', '<div class="a">hello</div>', '.a, .b {display: none}');
@@ -122,17 +161,17 @@ describe('criticalcss', () => {
     runTest(
       '.a {display: none; background: url("/common.css"); background-image: url(/common2.css) !important;} .b {display: block}',
       '<div class="a">hello</div>',
-      '.a {display: none; background: url("//static.com/common.css"); background-image: url(//static.com/common2.css) !important}',
+      '.a {display: none; background: url("//static.com/common.css"); background-image: url("//static.com/common2.css") !important}',
     );
     runTest(
       '.a {display: none; background: url("//test.com/common.css"); background-image: url(//test.com/common2.css) !important;} .b {display: block}',
       '<div class="a">hello</div>',
-      '.a {display: none; background: url("//test.com/common.css"); background-image: url(//test.com/common2.css) !important}',
+      '.a {display: none; background: url("//test.com/common.css"); background-image: url("//test.com/common2.css") !important}',
     );
     runTest(
       '.a {display: none; background: url("https://test.com/common.css"); background-image: url(https://test.com/common2.css) !important;} .b {display: block}',
       '<div class="a">hello</div>',
-      '.a {display: none; background: url("https://test.com/common.css"); background-image: url(https://test.com/common2.css) !important}',
+      '.a {display: none; background: url("https://test.com/common.css"); background-image: url("https://test.com/common2.css") !important}',
     );
   });
 
@@ -164,7 +203,7 @@ describe('criticalcss', () => {
     runTest(
       "@import 'custom.css'; .a {display: none} .b {display: block}",
       '<div class="a">hello</div>',
-      "@import 'custom.css'; .a {display: none}",
+      `@import "custom.css"; .a {display: none}`,
     );
     runTest(
       '@import url("chrome://communicator/skin/"); .a {display: none} .b {display: block}',
@@ -179,24 +218,25 @@ describe('criticalcss', () => {
     runTest(
       "@import url('landscape.css') screen and (orientation:landscape); .a {display: none} .b {display: block}",
       '<div class="a">hello</div>',
-      "@import url('landscape.css') screen and (orientation:landscape); .a {display: none}",
+      `@import url("landscape.css") screen and (orientation:landscape); .a {display: none}`,
     );
   });
   it('rewrites urls without host in @import', () => {
     runTest(
       '@import "/common.css" screen; @import url("/common2.css"); @import url(/common3.css); .a {display: none} .b {display: block}',
       '<div class="a">hello</div>',
-      '@import "//static.com/common.css" screen; @import url("//static.com/common2.css"); @import url(//static.com/common3.css); .a {display: none}',
+      '@import "//static.com/common.css" screen; @import url("//static.com/common2.css"); @import url("//static.com/common3.css"); .a {display: none}',
+      // '@import "//static.com/common.css" screen; @import url("//static.com/common2.css"); @import url(//static.com/common3.css); .a {display: none}',
     );
     runTest(
       '@import "//test.com/common.css" screen; @import url("//test.com/common2.css"); @import url(//test.com/common3.css); .a {display: none} .b {display: block}',
       '<div class="a">hello</div>',
-      '@import "//test.com/common.css" screen; @import url("//test.com/common2.css"); @import url(//test.com/common3.css); .a {display: none}',
+      '@import "//test.com/common.css" screen; @import url("//test.com/common2.css"); @import url("//test.com/common3.css"); .a {display: none}',
     );
     runTest(
       '@import "https://test.com/common.css" screen; @import url("https://test.com/common2.css"); @import url(https://test.com/common3.css); .a {display: none} .b {display: block}',
       '<div class="a">hello</div>',
-      '@import "https://test.com/common.css" screen; @import url("https://test.com/common2.css"); @import url(https://test.com/common3.css); .a {display: none}',
+      '@import "https://test.com/common.css" screen; @import url("https://test.com/common2.css"); @import url("https://test.com/common3.css"); .a {display: none}',
     );
   });
 
@@ -237,17 +277,17 @@ describe('criticalcss', () => {
     runTest(
       '@font-face { font-family: "Open Sans"; src: url(/fonts/OpenSans-Regular-webfont.woff2), url("/fonts/OpenSans-Regular-webfont.woff2") format("woff2"); } .a {display: none} .b {display: block}',
       '<div class="a">hello</div>',
-      '@font-face { font-family: "Open Sans"; src: url(//static.com/fonts/OpenSans-Regular-webfont.woff2), url("//static.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") } .a {display: none}',
+      '@font-face { font-family: "Open Sans"; src: url("//static.com/fonts/OpenSans-Regular-webfont.woff2"), url("//static.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") } .a {display: none}',
     );
     runTest(
       '@font-face { font-family: "Open Sans"; src: url(//test.com/fonts/OpenSans-Regular-webfont.woff2), url("//test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2"); } .a {display: none} .b {display: block}',
       '<div class="a">hello</div>',
-      '@font-face { font-family: "Open Sans"; src: url(//test.com/fonts/OpenSans-Regular-webfont.woff2), url("//test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") } .a {display: none}',
+      '@font-face { font-family: "Open Sans"; src: url("//test.com/fonts/OpenSans-Regular-webfont.woff2"), url("//test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") } .a {display: none}',
     );
     runTest(
       '@font-face { font-family: "Open Sans"; src: url(https://test.com/fonts/OpenSans-Regular-webfont.woff2), url("https://test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2"); } .a {display: none} .b {display: block}',
       '<div class="a">hello</div>',
-      '@font-face { font-family: "Open Sans"; src: url(https://test.com/fonts/OpenSans-Regular-webfont.woff2), url("https://test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") } .a {display: none}',
+      '@font-face { font-family: "Open Sans"; src: url("https://test.com/fonts/OpenSans-Regular-webfont.woff2"), url("https://test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") } .a {display: none}',
     );
   });
   it('works with @keyframes', () => {
@@ -394,11 +434,11 @@ describe('criticalcss', () => {
       }`,
       '<div class="a">hello</div>',
       `@supports not (display: grid) {
-          @font-face { font-family: "Open Sans"; src: url(//test.com/fonts/OpenSans-Regular-webfont.woff2) format("woff2") }
+          @font-face { font-family: "Open Sans"; src: url("//test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") }
           .a {display: block}
       }
       @supports (display: grid) {
-          @font-face { font-family: "Open Sans"; src: url(//test.com/fonts/OpenSans-Regular-webfont.woff2) format("woff2") }
+          @font-face { font-family: "Open Sans"; src: url("//test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") }
       }`,
     );
   });
@@ -430,34 +470,186 @@ describe('criticalcss', () => {
       '<div class="a">hello<div class="b"></div></div>',
       `.a {
         display: block;
-        --test: 10px;
+        --test: 10px
       }
       .b {
         display: flex;
-        padding: var(--test);
+        padding: var(--test)
       }`,
     );
   });
 
-  // it('works with :root scope', () => {
-  //   runTest(
-  //     `:root {
-  //       background: red;
-  //       --test: 10px;
-  //     }
-  //     .a {
-  //       display: flex;
-  //       padding: var(--test);
-  //     }`,
-  //     '<div class="a">hello</div>',
-  //     `:root {
-  //       background: red;
-  //       --test: 10px;
-  //     }
-  //     .a {
-  //       display: flex;
-  //       padding: var(--test);
-  //     }`,
-  //   );
-  // });
+  it('works with :root scope', () => {
+    runTest(
+      `:root {
+        background: red;
+        --test: 10px;
+      }
+      .a {
+        display: flex;
+        padding: var(--test);
+      }`,
+      '<div class="a">hello</div>',
+      `:root {
+        background: red;
+        --test: 10px
+      }
+      .a {
+        display: flex;
+        padding: var(--test)
+      }`,
+    );
+  });
+  it('handles @layer directives', () => {
+    runTest(
+      `@layer utilities {
+      .text-center { text-align: center }
+    }
+    @layer base {
+      p { color: blue }
+    }`,
+      '<p class="text-center">text</p>',
+      `@layer utilities {
+      .text-center { text-align: center }
+    }
+    @layer base {
+      p { color: blue }
+    }`
+    );
+  });
+  it('handles calc() expressions', () => {
+    runTest(
+      `.sidebar {
+      width: calc(100% - 20px);
+      height: calc(100vh - var(--header-height));
+      padding: calc(1rem + 2px);
+    }`,
+      '<div class="sidebar">content</div>',
+      `.sidebar {
+      width: calc(100% - 20px);
+      height: calc(100vh - var(--header-height));
+      padding: calc(1rem + 2px)
+    }`
+    );
+  });
+  it('handles shorthand values', () => {
+    runTest(
+      `.box {
+      margin: 10px;
+      padding: 10px 20px;
+      border: 1px solid red;
+    }`,
+      '<div class="box">content</div>',
+      `.box {
+      margin: 10px;
+      padding: 10px 20px;
+      border: 1px solid red
+    }`
+    );
+  });
+  it('handles CSS grid properties', () => {
+    runTest(
+      `.grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .item {
+      grid-column: span 2;
+    }`,
+      '<div class="grid"><div class="item">1</div></div>',
+      `.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px, 1fr));gap: 1rem}.item{grid-column: span 2}`
+    );
+  });
+  it('handles @position-try', () => {
+    runTest(
+      `@position-try --my-custom-position {
+          position-area: top left;
+          width: 50px;
+        }
+
+        .target {
+          position: absolute;
+          position-area: top right;
+          position-try-fallbacks: --my-custom-position;
+        }`,
+      '<div class="target">tip</div>',
+      `@position-try --my-custom-position {
+          position-area: top left;
+          width: 50px
+        }
+
+        .target {
+          position: absolute;
+          position-area: top right;
+          position-try-fallbacks: --my-custom-position
+        }`
+    );
+  });
+  it('handles @scope', () => {
+    runTest(
+      `@scope (.a) {
+        img { width: 100% }
+      }
+      @scope (.a) to (.b) {
+        p { color: red }
+      }`,
+      '<div class="card"><header>Title</header><div class="content"><p>Text</p></div></div>',
+      `@scope (.a) {
+        img { width: 100% }
+      }
+      @scope (.a) to (.b) {
+        p { color: red }
+      }`
+    );
+  });
+  it('handles @starting-style', () => {
+    runTest(`dialog[open] {
+        @starting-style {
+          opacity: 0;
+        }
+      }`,
+      '<div class="menu">Menu</div>',
+      `dialog[open] {
+        @starting-style {
+          opacity: 0
+        }
+      }`
+    );
+  });
+  it('handles @container queries', () => {
+    runTest(
+      `.card-container {
+      container-type: inline-size;
+    }
+    @container (min-width: 400px) {
+      .card {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+      }
+    }
+    @container (max-width: 399px) {
+      .card {
+        display: flex;
+        flex-direction: column;
+      }
+    }`,
+      '<div class="card-container"><div class="card">content</div></div>',
+      `.card-container {
+      container-type: inline-size
+    }
+    @container (min-width: 400px) {
+      .card {
+        display: grid;
+        grid-template-columns: 2fr 1fr
+      }
+    }
+    @container (max-width: 399px) {
+      .card {
+        display: flex;
+        flex-direction: column
+      }
+    }`
+    );
+  });
 });
