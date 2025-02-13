@@ -1,7 +1,7 @@
 /**
  * Represents an instance of parsed CSS
  */
-interface ParsedCss {
+export interface ParsedCss {
     /**
      * Generate the critical CSS required to display a chunk of HTML.
      * @param html The HTML you want to inspect.
@@ -12,7 +12,7 @@ interface ParsedCss {
      */
     generate(html: string, globalUsage?: GlobalUsageType, assetsHost?: string): string;
 }
-interface GlobalUsageType {
+export interface GlobalUsageType {
     /**
      * A list of CSS classes (without leading .) that should be considered used even if they do not appear in the HTML.
      * These classes are case sensitive.
@@ -34,6 +34,4 @@ interface GlobalUsageType {
  * @param css The CSS to parse
  * @returns A result object that can be passed to generate()
  */
-declare function parse(css: string): ParsedCss;
-
-export { type GlobalUsageType, type ParsedCss, parse };
+export declare function parse(css: string): ParsedCss;

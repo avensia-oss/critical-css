@@ -1,6 +1,10 @@
 import { parse as parseHtml, NodeType, Node, HTMLElement } from 'node-html-parser';
 import type * as csstree from 'css-tree';
-import { string, generate as csstreeGenerate, parse as csstreeParse } from 'css-tree';
+// import { string, generate as csstreeGenerate, parse as csstreeParse } from 'css-tree/cjs';
+// const { string, generate: csstreeGenerate, parse: csstreeParse }: typeof import('css-tree') = require('css-tree')
+const cssTree: typeof import('css-tree') = require('css-tree');
+
+const { string, generate: csstreeGenerate, parse: csstreeParse } = cssTree;
 
 
 const GEN_MODE: 'safe' | 'spec' = 'safe';
