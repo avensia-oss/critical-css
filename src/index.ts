@@ -2,21 +2,20 @@ import { parse as parseHtml, NodeType, Node, HTMLElement } from 'node-html-parse
 import * as csstree from 'css-tree';
 
 /**
- * Represents an instance of parsed CSS
+ * Represents an instance of processed CSS
  */
-export interface ParsedCss {
+export interface CriticalCssExtractor {
   /**
    * Generate the critical CSS required to display a chunk of HTML.
-   * @param html The HTML you want to inspect.
-   * @param parseResult The value returned from a previous call to parse().
-   * @param globalUsage Information about elements whose CSS will be returned even though they do not appear in the HTML.
+   * @param html The target HTML you want to generate critical CSS for.
+   * @param preservedSelectors Information about elements whose CSS will be preserved even though they do not appear in the HTML.
    * @param assetsHost If specified, external resources without a host will be rewritten to use this host (eg. if assetsHost is "somehost.com", then "url(/image.png)" will be rewritten to "url(//somehost.com/image.png)")
    * @returns The critical CSS required for the specified HTML.
    */
-  generate(html: string, globalUsage?: GlobalUsageType, assetsHost?: string): string;
+  extractFrom(html: string, preservedSelectors?: PreservedSelectors, assetsHost?: string): string;
 }
 
-export interface GlobalUsageType {
+export interface PreservedSelectors {
   /**
    * A list of CSS classes (without leading .) that should be considered used even if they do not appear in the HTML.
    * These classes are case sensitive.
@@ -35,128 +34,108 @@ export interface GlobalUsageType {
   tags?: string[];
 };
 
-type CssValueItem = CssAssetsHostValue | string;
-type CssValue = string | CssValueItem[];
+type CssUrlPart = CssAssetsHostValue | string;
+type CssContent = string | CssUrlPart[];
 
 type CssRule = {
   type: 'rule';
-  text: CssValue;
-  dependencySets?: Array<{ ids: string[] | null; classes: string[] | null; tags: string[] | null }>;
+  text: CssContent;
+  selectorDependencies?: Array<{ ids: string[] | null; classes: string[] | null; tags: string[] | null }>;
 };
 
 type CssMediaRule = {
   type: 'media';
-  prelude: CssValue;
-  rules: ParsedCssElement[];
+  prelude: CssContent;
+  childRules: ProcessedCssNode[];
 };
 
 type CssAssetsHostValue = {
   type: 'assetshost';
 };
 
-type ParsedCssElement = string | CssMediaRule | CssRule;
+type ProcessedCssNode = string | CssMediaRule | CssRule;
 
-function isElement(node: Node): node is HTMLElement {
+function isHtmlElement(node: Node): node is HTMLElement {
   return node.nodeType === NodeType.ELEMENT_NODE;
 }
 
-function getDomContent(renderedHtml: string, globalUsage: GlobalUsageType) {
+function extractHtmlSelectors(renderedHtml: string, globalUsage: PreservedSelectors) {
   const root = parseHtml(renderedHtml);
   const classes = new Set<string>(globalUsage.classes || []);
   const ids = new Set<string>(globalUsage.ids || []);
   const tags = new Set<string>(globalUsage.tags ? globalUsage.tags.map(t => t.toLowerCase()) : []);
 
-  function visit(node: Node) {
-    if (!isElement(node)) {
-      return;
-    }
-    const attributes = node.attributes;
-    const c: string = attributes.class;
-    if (c) {
-      c.split(' ').forEach(cls => classes.add(cls));
-    }
-    const id = attributes.id;
-    if (id) {
-      ids.add(id);
-    }
-    if (node.tagName) {
-      tags.add(node.tagName.toLowerCase());
-    }
-    for (const child of node.childNodes) {
-      visit(child);
-    }
+  function traverseNode(node: Node) {
+    if (!isHtmlElement(node)) return;
+
+    const { class: classNames, id } = node.attributes;
+    if (classNames) classNames.split(' ').forEach(cls => classes.add(cls));
+    if (id) ids.add(id);
+    if (node.tagName) tags.add(node.tagName.toLowerCase());
+
+    node.childNodes.forEach(traverseNode);
   }
 
-  visit(root);
-
-  return {
-    ids,
-    classes,
-    tags,
-  };
+  traverseNode(root);
+  return { ids, classes, tags };
 }
 
-function generate(parsedCss: ParsedCssElement[], html: string, globalUsage?: GlobalUsageType, assetsHost?: string) {
-  const { classes, ids, tags } = getDomContent(html, globalUsage || {});
+function extractCriticalCss(parsedCss: ProcessedCssNode[], html: string, globalUsage?: PreservedSelectors, assetsHost?: string) {
+  const { classes, ids, tags } = extractHtmlSelectors(html, globalUsage || {});
 
-  function shouldInclude(rule: CssRule) {
-    return !rule.dependencySets || rule.dependencySets.some(
+  function isRuleUsed(rule: CssRule) {
+    return !rule.selectorDependencies || rule.selectorDependencies.some(
       set =>
         (!set.classes || set.classes.every(c => classes.has(c))) &&
-        (!set.ids || set.ids.every(c => ids.has(c))) &&
-        (!set.tags || set.tags.every(c => tags.has(c))),
+        (!set.ids || set.ids.every(i => ids.has(i))) &&
+        (!set.tags || set.tags.every(t => tags.has(t))),
     );
   }
 
-  function generateValue(value: CssValue) {
-    if (typeof value === 'string') {
-      return value;
-    } else {
-      let result = '';
-      for (const v of value) {
-        if (typeof v === 'string') {
-          result += v;
-        } else if ('type' in v && v.type === 'assetshost') {
-          result += (assetsHost ? '//' + assetsHost : '');
-        }
+  function resolveCssContent(content: CssContent) {
+    if (typeof content === 'string') return content;
+
+    const result: string[] = [];
+    for (const part of content) {
+      if (typeof part === 'string') {
+        result.push(part);
+      } else if ('type' in part && part.type === 'assetshost') {
+        result.push(assetsHost ? '//' + assetsHost : '');
       }
-      return result;
     }
+    return result.join('');
   }
 
-  function generate(nodes: ParsedCssElement[]) {
-    let result = '';
-    nodes.forEach(c => {
+  function processCssNodes(nodes: ProcessedCssNode[]) {
+    const result: string[] = [];
+    for (const c of nodes) {
       if (typeof c === 'string') {
-        result += c;
+        result.push(c);
       } else if (c.type === 'media') {
-        const innerResult = generate(c.rules);
+        const innerResult = processCssNodes(c.childRules);
         if (innerResult) {
-          result += generateValue(c.prelude) + '{' + innerResult + '}';
+          result.push(resolveCssContent(c.prelude) + '{' + innerResult + '}');
         }
-      } else {
-        if (shouldInclude(c)) {
-          result += generateValue(c.text);
-        }
+      } else if (isRuleUsed(c)) {
+        result.push(resolveCssContent(c.text));
       }
-    });
-
-    return result;
+    }
+    return result.join('');
   }
 
-  return generate(parsedCss);
+  return processCssNodes(parsedCss);
 }
 
-function generateDependencySet(node: csstree.CssNode) {
-  if (node.type !== 'Selector') {
-    throw new Error(`Unexpected type ${node.type}, expected 'Selector'`);
+function extractSelectorDependencies(selector: csstree.CssNode) {
+  if (selector.type !== 'Selector') {
+    throw new Error(`Unexpected type ${selector.type}, expected 'Selector'`);
   }
 
   let ids: string[] | null = null;
   let classes: string[] | null = null;
   let tags: string[] | null = null;
 
-  node.children.forEach((child: csstree.CssNode) => {
+  selector.children.forEach((child: csstree.CssNode) => {
     switch (child.type) {
       case 'ClassSelector':
         classes = classes || [];
@@ -187,12 +166,12 @@ function generateDependencySet(node: csstree.CssNode) {
   return { classes, ids, tags };
 }
 
-function mapRule(node: csstree.CssNode): CssRule {
+function processCssRule(node: csstree.CssNode): CssRule {
   if (node.type !== 'Rule') {
     throw new Error(`Unexpected type ${node.type}, expected 'Rule'`);
   }
 
-  const items = [csstree.generate(node.prelude) + '{'];
+  const parts: CssUrlPart[] = [csstree.generate(node.prelude) + '{'];
 
   let firstDeclaration = true;
   node.block.children.forEach(c => {
@@ -201,28 +180,26 @@ function mapRule(node: csstree.CssNode): CssRule {
     }
 
     if (!firstDeclaration) {
-      items.push(';');
+      parts.push(';');
     }
-    pushDeclaration(items, c);
+    processDeclaration(parts, c);
     firstDeclaration = false;
   });
 
-  items.push('}');
+  parts.push('}');
 
   return {
     type: 'rule',
-    text: simplify(items),
-    dependencySets:
-      node.prelude.type === 'SelectorList' ? node.prelude.children.map(generateDependencySet).toArray() : [],
+    text: mergeCssParts(parts),
+    selectorDependencies:
+      node.prelude.type === 'SelectorList' ? node.prelude.children.map(extractSelectorDependencies).toArray() : [],
   };
 }
 
-function simplify(parts: CssValueItem[]): CssValue {
-  if (!parts.length) {
-    return '';
-  }
+function mergeCssParts(parts: CssUrlPart[]): CssContent {
+  if (!parts.length) return '';
 
-  const result = [parts[0]];
+  const result: CssUrlPart[] = [parts[0]];
   for (let i = 1; i < parts.length; i++) {
     const p = parts[i];
     if (typeof result[result.length - 1] === 'string' && typeof p === 'string') {
@@ -235,108 +212,108 @@ function simplify(parts: CssValueItem[]): CssValue {
   return result.length === 1 && typeof result[0] === 'string' ? result[0] as string : result;
 }
 
-function pushDeclaration(items: CssValueItem[], decl: csstree.Declaration) {
+function processDeclaration(parts: CssUrlPart[], decl: csstree.Declaration) {
   if (decl.value.type === 'Value' || decl.value.type === 'Raw') {
-    items.push(decl.property + ':');
+    parts.push(decl.property + ':');
 
     if (decl.value.type === 'Raw') {
-      items.push(decl.value.value);
+      parts.push(decl.value.value);
     }
     if (decl.value.type === 'Value') {
       decl.value.children.forEach(v => {
         if (v.type === 'Url') {
-          pushUrlValue(items, v.value);
+          processUrlValue(parts, v.value);
         } else {
-          items.push(csstree.generate(v));
+          parts.push(csstree.generate(v));
         }
       });
     }
 
     if (decl.important) {
-      items.push(' !important');
+      parts.push(' !important');
     }
   } else {
-    items.push(csstree.generate(decl.value))
+    parts.push(csstree.generate(decl.value));
   }
 }
 
-function pushUrlValue(items: CssValueItem[], node: csstree.CssNode) {
+function processUrlValue(parts: CssUrlPart[], node: csstree.CssNode) {
   if (node.type === 'Raw' || node.type === 'String') {
-    items.push('url(');
-    pushUrlString(items, node.value);
-    items.push(')');
+    parts.push('url(');
+    processUrlString(parts, node.value);
+    parts.push(')');
   } else {
-    items.push(csstree.generate(node));
+    parts.push(csstree.generate(node));
   }
 }
 
-function pushUrlString(items: CssValueItem[], value: string) {
+function processUrlString(parts: CssUrlPart[], value: string) {
   const quote = value.length > 0 && (value[0] === '"' || value[0] === '\'') ? value[0] : '';
   const unquotedValue = quote ? value.substr(1, value.length - 2) : value;
   if (unquotedValue.startsWith('/') && !unquotedValue.startsWith('//')) {
     if (quote) {
-      items.push(quote);
+      parts.push(quote);
     }
-    items.push({ type: 'assetshost' });
-    items.push(unquotedValue + quote);
+    parts.push({ type: 'assetshost' });
+    parts.push(unquotedValue + quote);
   } else {
-    items.push(value);
+    parts.push(value);
   }
 }
 
-function mapChild(node: csstree.CssNode): ParsedCssElement | null {
+function processCssNode(node: csstree.CssNode): ProcessedCssNode | null {
   switch (node.type) {
     case 'Atrule':
       if (node.name === 'supports' || node.name === 'media') {
         return {
           type: 'media',
           prelude: '@' + node.name + (node.prelude ? ' ' + csstree.generate(node.prelude) : ''),
-          rules: removeDuplicates(
+          childRules: deduplicateRules(
             node.block
               ? (node.block.children
-                .map(mapChild)
+                .map(processCssNode)
                 .filter(c => !!c)
-                .toArray() as ParsedCssElement[])
+                .toArray() as ProcessedCssNode[])
               : []
           ),
         };
       } else if (node.name === 'import' && node.prelude && 'children' in node.prelude) {
-        const items: CssValueItem[] = ['@import '];
+        const parts: CssUrlPart[] = ['@import '];
         let isFirst = true;
         node.prelude.children.forEach(c => {
           if (isFirst && c.type === 'String') {
-            pushUrlString(items, c.value);
+            processUrlString(parts, c.value);
           } else if (c.type === 'Url') {
-            pushUrlValue(items, c.value);
+            processUrlValue(parts, c.value);
           } else {
-            items.push(csstree.generate(c));
+            parts.push(csstree.generate(c));
           }
           isFirst = false;
         });
-        items.push(';');
-        return { type: 'rule', text: simplify(items) };
+        parts.push(';');
+        return { type: 'rule', text: mergeCssParts(parts) };
       } else if (node.name === 'font-face' && node.block) {
-        const items: CssValueItem[] = ['@font-face{'];
-        let first = true;
+        const parts: CssUrlPart[] = ['@font-face{'];
+        let isFirst = true;
         node.block.children.forEach(c => {
-          if (!first) {
-            items.push(';');
+          if (!isFirst) {
+            parts.push(';');
           }
           if (c.type === 'Declaration') {
-            pushDeclaration(items, c);
+            processDeclaration(parts, c);
           } else {
-            items.push(csstree.generate(c));
+            parts.push(csstree.generate(c));
           }
-          first = false;
+          isFirst = false;
         });
-        items.push('}');
-        return { type: 'rule', text: simplify(items) };
+        parts.push('}');
+        return { type: 'rule', text: mergeCssParts(parts) };
       } else {
         return csstree.generate(node);
       }
 
     case 'Rule':
-      return mapRule(node);
+      return processCssRule(node);
 
     case 'Raw':
     case 'Comment':
@@ -347,48 +324,45 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
   }
 }
 
-function removeDuplicates(rules: ParsedCssElement[]) {
+function deduplicateRules(rules: ProcessedCssNode[]) {
   // Note that we preserve the last of all duplicated rules because this is the rule that will take precedence
-  const found = new Set<string>();
-  const result = []
+  const seen = new Set<string>();
+  const result: ProcessedCssNode[] = [];
   for (let i = rules.length - 1; i >= 0; i--) {
     const json = JSON.stringify(rules[i]);
-    if (!found.has(json)) {
+    if (!seen.has(json)) {
       result.push(rules[i]);
-      found.add(json);
+      seen.add(json);
     }
   }
 
   result.reverse();
-
   return result;
 }
 
 /**
- * Parse CSS
- * @param css The CSS to parse
- * @returns A result object that can be passed to generate()
+ * Process CSS content to enable extraction of critical CSS
  */
-export function parse(css: string): ParsedCss {
-  let ast = csstree.parse(css);
+export function createCriticalCssExtractor(css: string): CriticalCssExtractor {
+  const ast = csstree.parse(css);
 
   if (ast.type !== 'StyleSheet') {
     throw new Error(`Unexpected type ${ast.type}, expected 'StyleSheet'`);
   }
 
-  const parsedCss: ParsedCssElement[] = [];
+  const processedNodes: ProcessedCssNode[] = [];
   ast.children.forEach(child => {
-    const mapped = mapChild(child);
-    if (mapped) {
-      parsedCss.push(mapped);
+    const processed = processCssNode(child);
+    if (processed) {
+      processedNodes.push(processed);
     }
   });
 
-  const deduplicatedCss = removeDuplicates(parsedCss);
+  const deduplicatedCss = deduplicateRules(processedNodes);
 
   return {
-    generate(html, globalUsage, assetsHost) {
-      return generate(deduplicatedCss, html, globalUsage, assetsHost);
+    extractFrom(html, globalUsage, assetsHost) {
+      return extractCriticalCss(deduplicatedCss, html, globalUsage, assetsHost);
     }
   };
 }

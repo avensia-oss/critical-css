@@ -23,6 +23,7 @@
     "dist/**/*"
   ],
   "devDependencies": {
+    "@types/node": "*",
     "@types/css-tree": "*",
     "@types/jest": "^24.0.14",
     "jest": "^24.8.0",
