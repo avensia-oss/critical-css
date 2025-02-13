@@ -170,6 +170,7 @@ describe('criticalcss', () => {
       "@import url('landscape.css') screen and (orientation:landscape); .a {display: none}",
     );
   });
+
   it('rewrites urls without host in @import', () => {
     runTest(
       '@import "/common.css" screen; @import url("/common2.css"); @import url(/common3.css); .a {display: none} .b {display: block}',
@@ -221,6 +222,7 @@ describe('criticalcss', () => {
       '@font-face { font-family: "Open Sans"; src: url("//test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") } .a {display: none}',
     );
   });
+
   it('rewrites urls without host in @font-face', () => {
     runTest(
       '@font-face { font-family: "Open Sans"; src: url(/fonts/OpenSans-Regular-webfont.woff2), url("/fonts/OpenSans-Regular-webfont.woff2") format("woff2"); } .a {display: none} .b {display: block}',
@@ -238,6 +240,7 @@ describe('criticalcss', () => {
       '@font-face { font-family: "Open Sans"; src: url(https://test.com/fonts/OpenSans-Regular-webfont.woff2), url("https://test.com/fonts/OpenSans-Regular-webfont.woff2") format("woff2") } .a {display: none}',
     );
   });
+
   it('works with @keyframes', () => {
     runTest(
       '@keyframes test { from { margin-left: 100%; width: 300%; } to { margin-left: 0; width: 100%; } } .a {display: none} .b {display: block}',
@@ -410,6 +413,53 @@ describe('criticalcss', () => {
       ':root { --main: #fff; } .a { color: var(--main); }',
       '<div class="a">hello</div>',
       ':root { --main: #fff } .a { color: var(--main) }',
+    );
+  });
+
+  it('works with @container queries', () => {
+    runTest(
+      '.a { container-name: hero; container-type: inline-size; } @container hero (width < 500px) { .b { color: red; } }',
+      '<div class="a"><div class="b">hello</div></div>',
+      '.a { container-name: hero; container-type: inline-size } @container hero (width < 500px) { .b { color: red } }',
+    );
+    runTest(
+      '.a { container: hero / inline-size; } @container hero (width < 500px) { .b { color: red; } }',
+      '<div class="a"><div class="b">hello</div></div>',
+      '.a { container: hero / inline-size } @container hero (width < 500px) { .b { color: red } }',
+    );
+  });
+
+  it('works with @layer', () => {
+    runTest(
+      '@layer reset, default; .a { color: red; } @layer components { .a { color: blue; } }',
+      '<div class="a">hello</div>',
+      '@layer reset, default; .a { color: red } @layer components { .a { color: blue } }',
+    );
+    runTest(
+      `@import url('framework.css') layer(components.framework);`,
+      '<div class="a">hello</div>',
+      `@import url('framework.css') layer(components.framework);`,
+    );
+  });
+
+  it('works with :where selector', () => {
+    runTest(
+      ':where(.a) { color: red; }',
+      '<div class="a">hello</div>',
+      ':where(.a) { color: red }',
+    );
+  });
+
+  it('works with :is selector', () => {
+    runTest(
+      ':is(.a) { color: red; }',
+      '<div class="a">hello</div>',
+      ':is(.a) { color: red }',
+    );
+    runTest(
+      '.a:is(.b) { color: red; }',
+      '<div class="a b">hello</div>',
+      '.a:is(.b) { color: red }',
     );
   });
 });
