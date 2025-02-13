@@ -404,4 +404,12 @@ describe('criticalcss', () => {
       '@media screen { .a {display: block} .a {display: none} }',
     );
   });
+
+  it('works with CSS variables', () => {
+    runTest(
+      ':root { --main: #fff; } .a { color: var(--main); }',
+      '<div class="a">hello</div>',
+      ':root { --main: #fff } .a { color: var(--main) }',
+    );
+  });
 });

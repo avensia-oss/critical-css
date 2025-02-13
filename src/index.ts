@@ -4,7 +4,7 @@ import * as csstree from 'css-tree';
 /**
  * Represents an instance of parsed CSS
  */
- export interface ParsedCss {
+export interface ParsedCss {
   /**
    * Generate the critical CSS required to display a chunk of HTML.
    * @param html The HTML you want to inspect.
@@ -235,23 +235,28 @@ function simplify(parts: CssValueItem[]): CssValue {
   return result.length === 1 && typeof result[0] === 'string' ? result[0] as string : result;
 }
 
-function pushDeclaration(items: CssValueItem[], value: csstree.Declaration) {
-  if (value.value.type === 'Value') {
-    items.push(value.property + ':');
+function pushDeclaration(items: CssValueItem[], decl: csstree.Declaration) {
+  if (decl.value.type === 'Value' || decl.value.type === 'Raw') {
+    items.push(decl.property + ':');
 
-    value.value.children.forEach(v => {
-      if (v.type === 'Url') {
-        pushUrlValue(items, v.value);
-      } else {
-        items.push(csstree.generate(v));
-      }
-    });
+    if (decl.value.type === 'Raw') {
+      items.push(decl.value.value);
+    }
+    if (decl.value.type === 'Value') {
+      decl.value.children.forEach(v => {
+        if (v.type === 'Url') {
+          pushUrlValue(items, v.value);
+        } else {
+          items.push(csstree.generate(v));
+        }
+      });
+    }
 
-    if (value.important) {
+    if (decl.important) {
       items.push(' !important');
     }
   } else {
-    items.push(csstree.generate(value.value))
+    items.push(csstree.generate(decl.value))
   }
 }
 
@@ -272,7 +277,7 @@ function pushUrlString(items: CssValueItem[], value: string) {
     if (quote) {
       items.push(quote);
     }
-    items.push({type: 'assetshost'});
+    items.push({ type: 'assetshost' });
     items.push(unquotedValue + quote);
   } else {
     items.push(value);
@@ -289,9 +294,9 @@ function mapChild(node: csstree.CssNode): ParsedCssElement | null {
           rules: removeDuplicates(
             node.block
               ? (node.block.children
-                  .map(mapChild)
-                  .filter(c => !!c)
-                  .toArray() as ParsedCssElement[])
+                .map(mapChild)
+                .filter(c => !!c)
+                .toArray() as ParsedCssElement[])
               : []
           ),
         };
