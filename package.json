@@ -8,7 +8,7 @@
     "critical",
     "css"
   ],
-  "author": "Erik Källén <erik.kallen@avensia.com>",
+  "author": "Erik Hellman <erik.hellman@avensia.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/avensia-oss/critical-css"
