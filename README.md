@@ -4,17 +4,23 @@ A library that takes a chunk of CSS and extracts only the parts that are require
 
 ## Usage
 
-The library only exports one function: `parse()`, which returns an object with a method `generate()`, which returns a string with only the CSS that is required in order to correctly display the passed HTML.
+The library only exports one function: `createCriticalCssExtractor()`, which returns an object with a method `extractFrom()`, which returns a string with only the CSS that is required in order to correctly display the passed HTML.
 
 ### Example
 ```
-import { parse } from '@avensia-oss/critical-css';
+import { createCriticalCssExtractor, PreservedSelectors, CriticalCssExtractor } from '@avensia-oss/critical-css';
 
 const css = '.main { display: block; } .unused { display: inline }';
 const html = '<div class="main"><span>Hello, world</span></div>';
 
-const parsedCss = parse(css);
-const criticalCss = parsedCss.generate(html);
+const preservedSelectors: PreservedSelectors = {
+  classes: ['globally-available-classname'],
+  ids: ['container'],
+  tags: ['html', 'body'],
+};
+
+const criticalCssExtractor = createCriticalCssExtractor(css);
+const criticalCss = criticalCssExtractor.extractFrom(html, preservedSelectors);
 
 expect(criticalCss).toBe('.main { display: block; }');
 ```
