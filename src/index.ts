@@ -59,11 +59,11 @@ function isHtmlElement(node: Node): node is HTMLElement {
   return node.nodeType === NodeType.ELEMENT_NODE;
 }
 
-function extractHtmlSelectors(renderedHtml: string, globalUsage: PreservedSelectors) {
+function extractHtmlSelectors(renderedHtml: string, preservedSelectors: PreservedSelectors) {
   const root = parseHtml(renderedHtml);
-  const classes = new Set<string>(globalUsage.classes || []);
-  const ids = new Set<string>(globalUsage.ids || []);
-  const tags = new Set<string>(globalUsage.tags ? globalUsage.tags.map(t => t.toLowerCase()) : []);
+  const classes = new Set<string>(preservedSelectors.classes || []);
+  const ids = new Set<string>(preservedSelectors.ids || []);
+  const tags = new Set<string>(preservedSelectors.tags ? preservedSelectors.tags.map(t => t.toLowerCase()) : []);
 
   function traverseNode(node: Node) {
     if (!isHtmlElement(node)) return;
@@ -80,8 +80,8 @@ function extractHtmlSelectors(renderedHtml: string, globalUsage: PreservedSelect
   return { ids, classes, tags };
 }
 
-function extractCriticalCss(parsedCss: ProcessedCssNode[], html: string, globalUsage?: PreservedSelectors, assetsHost?: string) {
-  const { classes, ids, tags } = extractHtmlSelectors(html, globalUsage || {});
+function extractCriticalCss(parsedCss: ProcessedCssNode[], html: string, preservedSelectors?: PreservedSelectors, assetsHost?: string) {
+  const { classes, ids, tags } = extractHtmlSelectors(html, preservedSelectors || {});
 
   function isRuleUsed(rule: CssRule) {
     return !rule.selectorDependencies || rule.selectorDependencies.some(
@@ -108,16 +108,16 @@ function extractCriticalCss(parsedCss: ProcessedCssNode[], html: string, globalU
 
   function processCssNodes(nodes: ProcessedCssNode[]) {
     const result: string[] = [];
-    for (const c of nodes) {
-      if (typeof c === 'string') {
-        result.push(c);
-      } else if (c.type === 'media') {
-        const innerResult = processCssNodes(c.childRules);
+    for (const node of nodes) {
+      if (typeof node === 'string') {
+        result.push(node);
+      } else if (node.type === 'media') {
+        const innerResult = processCssNodes(node.childRules);
         if (innerResult) {
-          result.push(resolveCssContent(c.prelude) + '{' + innerResult + '}');
+          result.push(resolveCssContent(node.prelude) + '{' + innerResult + '}');
         }
-      } else if (isRuleUsed(c)) {
-        result.push(resolveCssContent(c.text));
+      } else if (isRuleUsed(node)) {
+        result.push(resolveCssContent(node.text));
       }
     }
     return result.join('');
@@ -254,8 +254,7 @@ function processUrlString(parts: CssUrlPart[], value: string) {
     if (quote) {
       parts.push(quote);
     }
-    parts.push({ type: 'assetshost' });
-    parts.push(unquotedValue + quote);
+    parts.push({ type: 'assetshost' }, unquotedValue + quote);
   } else {
     parts.push(value);
   }
@@ -361,8 +360,8 @@ export function createCriticalCssExtractor(css: string): CriticalCssExtractor {
   const deduplicatedCss = deduplicateRules(processedNodes);
 
   return {
-    extractFrom(html, globalUsage, assetsHost) {
-      return extractCriticalCss(deduplicatedCss, html, globalUsage, assetsHost);
+    extractFrom(html, preservedSelectors, assetsHost) {
+      return extractCriticalCss(deduplicatedCss, html, preservedSelectors, assetsHost);
     }
   };
 }
